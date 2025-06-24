@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learn to Prompt with Jen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .font-mono {
+            font-family: 'Roboto Mono', monospace;
+        }
+        .chat-bubble-user {
+            background-color: #3B82F6; /* blue-500 */
+            color: white;
+        }
+        .chat-bubble-ai {
+            background-color: #E5E7EB; /* gray-200 */
+            color: #1F2937; /* gray-800 */
+        }
+        .lesson-active {
+            background-color: #DBEAFE; /* blue-100 */
+            color: #1E40AF; /* blue-800 */
+            font-weight: 600;
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="flex flex-col md:flex-row h-screen">
+        <!-- Sidebar - Lesson Plan -->
+        <aside class="w-full md:w-1/4 lg:w-1/5 bg-white p-6 border-r border-gray-200 flex-shrink-0">
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">Learn Prompting</h1>
+            <p class="text-sm text-gray-500 mb-6">Your interactive guide to mastering LLMs.</p>
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Lesson Plan</h2>
+            <ul id="lesson-plan" class="space-y-2">
+                <li id="lesson-1" class="p-3 rounded-lg lesson-active">Lesson 1: The Basics of a Prompt</li>
+                <li id="lesson-2" class="p-3 rounded-lg text-gray-600">Lesson 2: Adding Context</li>
+                <li id="lesson-3" class="p-3 rounded-lg text-gray-600">Lesson 3: Setting a Persona</li>
+                <li id="lesson-4" class="p-3 rounded-lg text-gray-600">Lesson 4: Iteration & Refinement</li>
+                <li id="lesson-5" class="p-3 rounded-lg text-gray-600">Lesson 5: Advanced Techniques</li>
+            </ul>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 flex flex-col bg-gray-50 h-full">
+            <header class="bg-white p-4 border-b border-gray-200 shadow-sm flex items-center">
+                <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-xl mr-3">J</div>
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900">Jen, your AI Guide</h2>
+                    <p class="text-sm text-green-500 flex items-center">
+                        <span class="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
+                        Online
+                    </p>
+                </div>
+            </header>
+
+            <!-- Chat History -->
+            <div id="chat-history" class="flex-1 p-6 overflow-y-auto">
+                <!-- Messages will be dynamically added here -->
+            </div>
+            
+            <!-- Typing Indicator -->
+            <div id="typing-indicator" class="px-6 pb-2 hidden">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 text-lg">J</div>
+                    <div class="flex items-center space-x-1">
+                        <span class="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style="animation-delay: 0s;"></span>
+                        <span class="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style="animation-delay: 0.2s;"></span>
+                        <span class="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style="animation-delay: 0.4s;"></span>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Message Input -->
+            <div class="p-4 bg-white border-t border-gray-200">
+                <div class="relative">
+                    <input type="text" id="message-input" class="w-full pl-4 pr-20 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" placeholder="Type your answer here...">
+                    <button id="send-button" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
+                        Send
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const chatHistoryEl = document.getElementById('chat-history');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const lessonPlanItems = document.querySelectorAll('#lesson-plan li');
+
+        // This is the core instruction set for our AI guide, Jen.
+        const systemPrompt = `You are an expert AI guide and teacher named "Jen." Your primary goal is to teach me, a new user, how to effectively use and "prompt" a Large Language Model (LLM) like yourself.
+
+        Your teaching style must be:
+        1. **Interactive and Socratic:** Do not just lecture me. Ask me questions to make me think. Guide me to discover concepts myself.
+        2. **Hands-On and Practical:** The best way to learn is by doing. After explaining a concept, you must immediately give me a small, practical task to complete right here in our conversation.
+        3. **Scaffolded:** Start with the absolute basics and gradually build up to more advanced techniques. Assume I know nothing.
+        4. **Encouraging and Patient:** Provide constructive feedback on my attempts. If I make a mistake, explain why it didn't work well and encourage me to try again.
+
+        Here is our lesson plan:
+        - **Lesson 1: The Basics of a Prompt.** What a prompt is and the "garbage in, garbage out" principle. (Current Lesson)
+        - **Lesson 2: Adding Context.** The power of giving the LLM background information.
+        - **Lesson 3: Setting a Persona.** How to ask the LLM to act as a specific character or expert.
+        - **Lesson 4: Iteration and Refinement.** The art of improving a prompt based on the output.
+        - **Lesson 5: Advanced Techniques.** (e.g., Chain of Thought, Zero-shot vs. Few-shot prompting, setting constraints).
+
+        When you believe the user has grasped a lesson, explicitly say "Let's move to Lesson X: [Lesson Name]".
+
+        **Your first action:**
+        Introduce yourself as Jen, state our goal, and then begin Lesson 1 by asking me what I *think* a "prompt" is. Wait for my answer before you proceed.`;
+        
+        // We store the conversation history here.
+        let conversationHistory = [];
+
+        /**
+         * Appends a message to the chat UI.
+         * @param {string} sender - Who sent the message ('user' or 'ai').
+         * @param {string} message - The message content.
+         */
+        function appendMessage(sender, message) {
+            const messageWrapper = document.createElement('div');
+            messageWrapper.classList.add('flex', 'mb-4', 'max-w-xl', 'mx-auto', 'items-start');
+
+            if (sender === 'user') {
+                messageWrapper.classList.add('justify-end', 'ml-auto');
+            } else {
+                messageWrapper.classList.add('justify-start', 'mr-auto');
+            }
+
+            let bubbleContent;
+            if (sender === 'ai') {
+                bubbleContent = `
+                    <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-lg mr-3 flex-shrink-0">J</div>
+                    <div class="chat-bubble-ai p-4 rounded-lg shadow-sm">
+                        <p>${message}</p>
+                    </div>
+                `;
+            } else {
+                 bubbleContent = `
+                    <div class="chat-bubble-user p-4 rounded-lg shadow-sm">
+                        <p>${message}</p>
+                    </div>
+                    <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center font-bold text-gray-700 text-lg ml-3 flex-shrink-0">You</div>
+                `;
+            }
+
+            messageWrapper.innerHTML = bubbleContent;
+            chatHistoryEl.appendChild(messageWrapper);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight; // Auto-scroll to the latest message
+        }
+        
+        /**
+         * Updates the active lesson in the sidebar.
+         * @param {string} aiResponse - The text from the AI.
+         */
+        function updateLessonTracker(aiResponse) {
+            for (let i = 1; i <= 5; i++) {
+                if (aiResponse.toLowerCase().includes(`lesson ${i}`)) {
+                    lessonPlanItems.forEach(item => item.classList.remove('lesson-active'));
+                    const activeLessonEl = document.getElementById(`lesson-${i}`);
+                    if(activeLessonEl) {
+                        activeLessonEl.classList.add('lesson-active');
+                    }
+                }
+            }
+        }
+
+        /**
+         * Sends the conversation to the Gemini API and gets a response.
+         */
+        async function getJenResponse() {
+            typingIndicator.classList.remove('hidden');
+            sendButton.disabled = true;
+
+            // We combine the system prompt with the conversation history for the API call.
+            const payload = {
+                contents: [
+                    { role: "user", parts: [{ text: systemPrompt }] },
+                    { role: "model", parts: [{ text: "Understood. I am Jen. I will now begin the lesson." }] },
+                    ...conversationHistory
+                ]
+            };
+            
+            // NOTE: The API key is left empty here. Canvas will automatically handle it.
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                
+                let jenMessage = "Sorry, I had a little trouble thinking. Could you try asking again?";
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    jenMessage = result.candidates[0].content.parts[0].text;
+                } else {
+                    console.error("API response was not in the expected format:", result);
+                }
+
+                // Add Jen's response to history and UI
+                conversationHistory.push({ role: "model", parts: [{ text: jenMessage }] });
+                appendMessage('ai', jenMessage);
+                updateLessonTracker(jenMessage);
+
+            } catch (error) {
+                console.error('Error fetching from Gemini API:', error);
+                appendMessage('ai', 'I seem to be having connection issues. Please check the console for errors and try again.');
+            } finally {
+                typingIndicator.classList.add('hidden');
+                sendButton.disabled = false;
+                messageInput.disabled = false;
+                messageInput.focus();
+            }
+        }
+        
+        /**
+         * Handles the user sending a message.
+         */
+        async function handleSendMessage() {
+            const userMessage = messageInput.value.trim();
+            if (userMessage === '') return;
+
+            // Add user message to history and UI
+            appendMessage('user', userMessage);
+            conversationHistory.push({ role: "user", parts: [{ text: userMessage }] });
+            
+            messageInput.value = '';
+            messageInput.disabled = true;
+
+            await getJenResponse();
+        }
+
+        // Event Listeners
+        sendButton.addEventListener('click', handleSendMessage);
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                handleSendMessage();
+            }
+        });
+
+        // Initial greeting from Jen
+        window.addEventListener('load', () => {
+             // We don't need to call the API for the very first message,
+             // as the system prompt defines what Jen should say first.
+            const firstMessage = "Hello! I'm Jen. My purpose is to help you learn how to get the most out of AI models like me. We'll go through a few lessons together to turn you into a pro at prompting.\n\nLet's start with Lesson 1. In your own words, what do you think a 'prompt' is?";
+            appendMessage('ai', firstMessage);
+            conversationHistory.push({ role: "model", parts: [{ text: firstMessage }] });
+        });
+    </script>
+</body>
+</html>
