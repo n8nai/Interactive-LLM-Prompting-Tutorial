@@ -28,6 +28,11 @@
             color: #1E40AF; /* blue-800 */
             font-weight: 600;
         }
+        .lesson-complete {
+            background-color: #D1FAE5; /* green-100 */
+            color: #065F46; /* green-800 */
+            font-weight: 500;
+        }
         /* Scrollbar styling */
         ::-webkit-scrollbar {
             width: 8px;
@@ -41,13 +46,6 @@
         }
         ::-webkit-scrollbar-thumb:hover {
             background: #555;
-        }
-        /* Modal styles */
-        .modal-overlay {
-            transition: opacity 0.3s ease;
-        }
-        .modal-container {
-            transition: transform 0.3s ease;
         }
     </style>
 </head>
@@ -93,53 +91,17 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Input bar has been removed for a button-only interface -->
 
-            <div class="p-4 bg-white border-t border-gray-200">
-                <div class="relative">
-                    <input type="text" id="message-input" class="w-full pl-4 pr-20 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" placeholder="Click a suggestion above to continue..." disabled>
-                    <button id="send-button" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>
-                        Send
-                    </button>
-                </div>
-            </div>
         </main>
     </div>
-
-    <!-- ✨ Prompt Analyzer Modal -->
-    <div id="analyzer-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
-        <div class="modal-container bg-white rounded-xl shadow-2xl w-full max-w-2xl transform scale-95">
-            <div class="flex justify-between items-center p-5 border-b border-gray-200">
-                <h3 class="text-xl font-bold text-gray-800">✨ Prompt Analyzer</h3>
-                <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600">&times;</button>
-            </div>
-            <div class="p-6">
-                <div id="analyzer-content">
-                    <div id="analyzer-loading">
-                        <p class="text-gray-600 mb-4">Analyzing your prompt with Gemini...</p>
-                        <div class="space-y-3">
-                           <div class="h-4 bg-gray-200 rounded-full w-3/4 animate-pulse"></div>
-                           <div class="h-4 bg-gray-200 rounded-full w-1/2 animate-pulse"></div>
-                           <div class="h-4 bg-gray-200 rounded-full w-5/6 animate-pulse"></div>
-                        </div>
-                    </div>
-                    <div id="analyzer-result" class="hidden"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
 
     <script>
         // DOM Elements
         const chatHistoryEl = document.getElementById('chat-history');
-        const messageInput = document.getElementById('message-input');
-        const sendButton = document.getElementById('send-button');
         const typingIndicator = document.getElementById('typing-indicator');
         const lessonPlanItems = document.querySelectorAll('#lesson-plan li');
-        const analyzerModal = document.getElementById('analyzer-modal');
-        const closeModalBtn = document.getElementById('close-modal-btn');
-        const analyzerLoading = document.getElementById('analyzer-loading');
-        const analyzerResult = document.getElementById('analyzer-result');
 
         // AI System Prompts
         const jenSystemPrompt = `You are an expert AI guide and teacher named "Jen." Your primary goal is to teach me, a new user who may have special needs (e.g., on the spectrum), how to effectively use a Large Language Model (LLM).
@@ -153,6 +115,7 @@
             2. [Second answer choice]
             3. [Third answer choice]
         4.  **Gentle Progression:** When the user completes a task by selecting an answer, confirm they did well, briefly explain why it was a good choice, and then gently move to the next part of the lesson or the next lesson.
+        5.  **Final Lesson Completion:** After the user successfully completes the final task of the final lesson (Lesson 5), your ABSOLUTELY FINAL response MUST ONLY contain the text: "You've done an amazing job and completed all the lessons! You're now ready to write prompts on your own. You can click the button below to finish." followed by the completion trigger: LESSON_COMPLETE.
 
         Lesson Plan:
         - Lesson 1: The Basics of a Prompt.
@@ -164,14 +127,12 @@
         **Your first action:**
         Introduce yourself as Jen, warmly state our goal, and then begin Lesson 1 by asking what a "prompt" is. Provide three simple, clickable options for the answer. Example options: "Instructions for the AI", "A question I ask", "A computer command".`;
         
-        const analyzerSystemPrompt = `As a world-class prompt engineering coach, analyze the following prompt written by a new learner. Provide your feedback in two sections. First, an "Analysis" section with a concise, encouraging critique (mention one thing they did well and one area for improvement). Second, a "Suggested Rewrite" section with an improved version of their prompt. Use Markdown for formatting (e.g., **Analysis:**, **Suggested Rewrite:**).`;
-
         let conversationHistory = [];
         
         const apiKey = "%%GEMINI_API_KEY%%";
 
         /**
-         * Appends a message and suggestion buttons to the chat UI.
+         * Appends a message and suggestion/completion buttons to the chat UI.
          */
         function appendMessage(sender, message) {
             const messageWrapper = document.createElement('div');
@@ -179,8 +140,12 @@
             
             let mainMessage = message;
             let suggestions = [];
+            let isComplete = false;
 
-            if (sender === 'ai' && message.includes('SUGGESTED_ANSWERS:')) {
+            if (sender === 'ai' && message.includes('LESSON_COMPLETE')) {
+                mainMessage = message.replace('LESSON_COMPLETE', '').trim();
+                isComplete = true;
+            } else if (sender === 'ai' && message.includes('SUGGESTED_ANSWERS:')) {
                 const parts = message.split('SUGGESTED_ANSWERS:');
                 mainMessage = parts[0].trim();
                 const suggestionsText = parts[1].trim();
@@ -227,6 +192,15 @@
                     suggestionsContainer.appendChild(button);
                 });
                 messageWrapper.appendChild(suggestionsContainer);
+            } else if (isComplete) {
+                const completionContainer = document.createElement('div');
+                completionContainer.classList.add('flex', 'w-full', 'justify-start', 'pl-11', 'mt-3');
+                const button = document.createElement('button');
+                button.textContent = 'Complete and Continue';
+                button.classList.add('complete-btn', 'bg-green-500', 'text-white', 'font-bold', 'py-2', 'px-6', 'rounded-full', 'hover:bg-green-600', 'transition-colors');
+                button.onclick = handleCompleteClick;
+                completionContainer.appendChild(button);
+                updateLessonTracker(null, true); // Mark all lessons as complete
             }
             
             chatHistoryEl.appendChild(messageWrapper);
@@ -234,12 +208,23 @@
         }
         
         /**
+         * Handles the final click when all lessons are done.
+         */
+        function handleCompleteClick() {
+            appendMessage('ai', "Thank you for learning with me! You can close this window now.");
+            document.querySelectorAll('.complete-btn').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed', 'hover:bg-green-500');
+            });
+        }
+
+        /**
          * Handles the click on a suggestion button.
          */
         async function handleSuggestionClick(suggestionText) {
             document.querySelectorAll('.suggestion-btn').forEach(btn => {
                 btn.disabled = true;
-                btn.classList.add('opacity-50', 'cursor-not-allowed', 'hover:bg-white');
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
                 btn.classList.remove('hover:bg-blue-50');
             });
 
@@ -280,7 +265,6 @@
                 ...conversationHistory
             ];
             
-            // For the very first message, we add a model preamble.
             if (conversationHistory.length === 0) {
                  payload.splice(1, 0, { role: "model", parts: [{ text: "Understood. I am Jen. I will now begin the lesson in a gentle, guided manner." }] });
             }
@@ -294,36 +278,46 @@
             typingIndicator.classList.add('hidden');
         }
 
-        async function handleSendMessage() {
-            // This function is now effectively disabled in favor of suggestion clicks.
-            // We'll leave it for potential future use or manual override.
-        }
+        /**
+         * Updates the lesson tracker in the sidebar to show completed and active lessons.
+         * @param {string} aiResponse - The AI's latest message.
+         * @param {boolean} allComplete - Optional flag to mark all lessons as complete.
+         */
+        function updateLessonTracker(aiResponse, allComplete = false) {
+            if (allComplete) {
+                lessonPlanItems.forEach(item => {
+                    item.classList.remove('lesson-active');
+                    item.classList.add('lesson-complete');
+                });
+                return;
+            }
 
-        function updateLessonTracker(aiResponse) {
-            for (let i = 1; i <= 5; i++) {
+            let activeLessonNumber = 0;
+            // Find the highest lesson number mentioned to set it as active
+            for (let i = 5; i >= 1; i--) {
                 if (aiResponse.toLowerCase().includes(`lesson ${i}`)) {
-                    lessonPlanItems.forEach(item => item.classList.remove('lesson-active'));
-                    const activeLessonEl = document.getElementById(`lesson-${i}`);
-                    if(activeLessonEl) activeLessonEl.classList.add('lesson-active');
+                    activeLessonNumber = i;
+                    break;
                 }
+            }
+
+            // Update the UI based on the active lesson
+            if (activeLessonNumber > 0) {
+                lessonPlanItems.forEach((item, index) => {
+                    const lessonNum = index + 1;
+                    item.classList.remove('lesson-active', 'lesson-complete'); // Reset styles first
+
+                    if (lessonNum < activeLessonNumber) {
+                        item.classList.add('lesson-complete');
+                    } else if (lessonNum === activeLessonNumber) {
+                        item.classList.add('lesson-active');
+                    }
+                });
             }
         }
         
-        function closeModal() {
-            analyzerModal.classList.add('hidden');
-            document.body.style.overflow = 'auto';
-        }
-
-        // --- Event Listeners ---
-        sendButton.addEventListener('click', handleSendMessage);
-        closeModalBtn.addEventListener('click', closeModal);
-        analyzerModal.addEventListener('click', (e) => {
-            if (e.target === analyzerModal) closeModal();
-        });
-        
         // Initial greeting from Jen
         window.addEventListener('load', () => {
-            // Start the conversation by getting the first message from the AI
             getJenResponse();
         });
     </script>
