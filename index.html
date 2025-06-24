@@ -96,8 +96,8 @@
 
             <div class="p-4 bg-white border-t border-gray-200">
                 <div class="relative">
-                    <input type="text" id="message-input" class="w-full pl-4 pr-20 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" placeholder="Type your answer here...">
-                    <button id="send-button" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
+                    <input type="text" id="message-input" class="w-full pl-4 pr-20 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" placeholder="Click a suggestion above to continue..." disabled>
+                    <button id="send-button" class="absolute right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-full transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>
                         Send
                     </button>
                 </div>
@@ -142,45 +142,70 @@
         const analyzerResult = document.getElementById('analyzer-result');
 
         // AI System Prompts
-        const jenSystemPrompt = `You are an expert AI guide and teacher named "Jen." Your primary goal is to teach me, a new user, how to effectively use and "prompt" a Large Language Model (LLM) like yourself. Your teaching style is interactive, practical, scaffolded, and encouraging. Your first action is to introduce yourself, state the goal, and ask me what I think a "prompt" is. Wait for my answer. When I grasp a lesson, you must say "Let's move to Lesson X: [Lesson Name]".
+        const jenSystemPrompt = `You are an expert AI guide and teacher named "Jen." Your primary goal is to teach me, a new user who may have special needs (e.g., on the spectrum), how to effectively use a Large Language Model (LLM).
+
+        Your teaching style is critical:
+        1.  **Extremely Gentle and Encouraging:** Always be positive, patient, and warm. Use simple, direct, and clear language. Praise effort and correct answers enthusiastically (e.g., "That's exactly right! Great job!").
+        2.  **Predictable and Structured:** Follow the lesson plan strictly. Always announce when a lesson is starting or ending.
+        3.  **Guided Practice (Mandatory):** After you ask a question or give a task, you MUST provide exactly three suggested answers for the user to choose from. This reduces pressure. Format them at the very end of your message like this, with no text after it:
+            SUGGESTED_ANSWERS:
+            1. [First answer choice]
+            2. [Second answer choice]
+            3. [Third answer choice]
+        4.  **Gentle Progression:** When the user completes a task by selecting an answer, confirm they did well, briefly explain why it was a good choice, and then gently move to the next part of the lesson or the next lesson.
+
         Lesson Plan:
         - Lesson 1: The Basics of a Prompt.
         - Lesson 2: Adding Context.
         - Lesson 3: Setting a Persona.
         - Lesson 4: Iteration and Refinement.
-        - Lesson 5: Advanced Techniques.`;
+        - Lesson 5: Advanced Techniques.
+
+        **Your first action:**
+        Introduce yourself as Jen, warmly state our goal, and then begin Lesson 1 by asking what a "prompt" is. Provide three simple, clickable options for the answer. Example options: "Instructions for the AI", "A question I ask", "A computer command".`;
         
         const analyzerSystemPrompt = `As a world-class prompt engineering coach, analyze the following prompt written by a new learner. Provide your feedback in two sections. First, an "Analysis" section with a concise, encouraging critique (mention one thing they did well and one area for improvement). Second, a "Suggested Rewrite" section with an improved version of their prompt. Use Markdown for formatting (e.g., **Analysis:**, **Suggested Rewrite:**).`;
 
         let conversationHistory = [];
         
-        // This placeholder will be replaced by the GitHub Action
         const apiKey = "%%GEMINI_API_KEY%%";
 
         /**
-         * Appends a message to the chat UI, adding an analyzer button for user messages.
+         * Appends a message and suggestion buttons to the chat UI.
          */
         function appendMessage(sender, message) {
             const messageWrapper = document.createElement('div');
-            messageWrapper.classList.add('flex', 'mb-4', 'max-w-2xl', 'items-start', 'group');
+            messageWrapper.classList.add('flex', 'flex-col', 'mb-4', 'max-w-2xl', 'items-start');
+            
+            let mainMessage = message;
+            let suggestions = [];
+
+            if (sender === 'ai' && message.includes('SUGGESTED_ANSWERS:')) {
+                const parts = message.split('SUGGESTED_ANSWERS:');
+                mainMessage = parts[0].trim();
+                const suggestionsText = parts[1].trim();
+                suggestions = suggestionsText.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(line => line);
+            }
+            
+            const messageContentWrapper = document.createElement('div');
+            messageContentWrapper.classList.add('flex', 'items-start', 'w-full');
             
             if (sender === 'user') {
-                messageWrapper.classList.add('justify-end', 'ml-auto');
+                 messageContentWrapper.classList.add('justify-end', 'ml-auto');
             } else {
-                messageWrapper.classList.add('justify-start', 'mr-auto');
+                 messageContentWrapper.classList.add('justify-start', 'mr-auto');
             }
-
+            
             let bubbleContent;
             if (sender === 'ai') {
                 bubbleContent = `
                     <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-lg mr-3 flex-shrink-0">J</div>
                     <div class="chat-bubble-ai p-4 rounded-lg shadow-sm">
-                        <p>${message.replace(/\n/g, '<br>')}</p>
+                        <p>${mainMessage.replace(/\n/g, '<br>')}</p>
                     </div>
                 `;
             } else { // User message
                  bubbleContent = `
-                    <button class="analyze-btn opacity-0 group-hover:opacity-100 transition-opacity mr-2 p-1.5 bg-white border rounded-full text-sm shadow-sm hover:bg-gray-100" title="Analyze this prompt">✨</button>
                     <div class="chat-bubble-user p-4 rounded-lg shadow-sm">
                         <p>${message}</p>
                     </div>
@@ -188,19 +213,42 @@
                 `;
             }
 
-            messageWrapper.innerHTML = bubbleContent;
-            chatHistoryEl.appendChild(messageWrapper);
+            messageContentWrapper.innerHTML = bubbleContent;
+            messageWrapper.appendChild(messageContentWrapper);
             
-            if (sender === 'user') {
-                const analyzeBtn = messageWrapper.querySelector('.analyze-btn');
-                analyzeBtn.addEventListener('click', () => handleAnalyzeClick(message));
+            if (suggestions.length > 0) {
+                const suggestionsContainer = document.createElement('div');
+                suggestionsContainer.classList.add('flex', 'flex-wrap', 'gap-2', 'mt-3', 'w-full', 'justify-start', 'pl-11');
+                suggestions.forEach(suggestion => {
+                    const button = document.createElement('button');
+                    button.textContent = suggestion;
+                    button.classList.add('suggestion-btn', 'bg-white', 'text-blue-600', 'font-semibold', 'py-2', 'px-4', 'border', 'border-blue-500', 'rounded-full', 'hover:bg-blue-50', 'transition-colors', 'text-sm');
+                    button.onclick = () => handleSuggestionClick(suggestion);
+                    suggestionsContainer.appendChild(button);
+                });
+                messageWrapper.appendChild(suggestionsContainer);
             }
             
+            chatHistoryEl.appendChild(messageWrapper);
             chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+        
+        /**
+         * Handles the click on a suggestion button.
+         */
+        async function handleSuggestionClick(suggestionText) {
+            document.querySelectorAll('.suggestion-btn').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed', 'hover:bg-white');
+                btn.classList.remove('hover:bg-blue-50');
+            });
+
+            appendMessage('user', suggestionText);
+            conversationHistory.push({ role: "user", parts: [{ text: suggestionText }] });
+            await getJenResponse();
         }
 
         async function callGemini(contents) {
-            // Check if the placeholder is still there. If so, the key wasn't replaced.
             if (apiKey.startsWith("%%")) {
                  console.error("API Key has not been replaced. Please configure your GitHub Action secret.");
                  return "It looks like the API key is missing. If you're the developer, please make sure the GitHub Action secret is set up correctly.";
@@ -216,27 +264,26 @@
                 if (result.candidates && result.candidates[0]?.content?.parts?.[0]?.text) {
                     return result.candidates[0].content.parts[0].text;
                 }
-                console.error("API response was not in the expected format:", result);
-                if (result.error) {
-                    console.error("API Error:", result.error.message);
-                    return `An API error occurred: ${result.error.message}`;
-                }
+                console.error("API response error:", result);
                 return "Sorry, I had a little trouble thinking. Could you try asking again?";
             } catch (error) {
                 console.error('Error fetching from Gemini API:', error);
-                return 'I seem to be having connection issues. Please check the console for errors and try again.';
+                return 'I seem to be having connection issues. Please check the console for errors.';
             }
         }
         
         async function getJenResponse() {
             typingIndicator.classList.remove('hidden');
-            sendButton.disabled = true;
-
+            
             const payload = [
                 { role: "user", parts: [{ text: jenSystemPrompt }] },
-                { role: "model", parts: [{ text: "Understood. I am Jen. I will now begin the lesson." }] },
                 ...conversationHistory
             ];
+            
+            // For the very first message, we add a model preamble.
+            if (conversationHistory.length === 0) {
+                 payload.splice(1, 0, { role: "model", parts: [{ text: "Understood. I am Jen. I will now begin the lesson in a gentle, guided manner." }] });
+            }
             
             const jenMessage = await callGemini(payload);
 
@@ -245,46 +292,11 @@
             updateLessonTracker(jenMessage);
 
             typingIndicator.classList.add('hidden');
-            sendButton.disabled = false;
-            messageInput.disabled = false;
-            messageInput.focus();
-        }
-
-        async function handleAnalyzeClick(promptToAnalyze) {
-            analyzerModal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-            analyzerResult.classList.add('hidden');
-            analyzerLoading.classList.remove('hidden');
-            
-            const payload = [
-                { role: "user", parts: [{ text: analyzerSystemPrompt }] },
-                { role: "model", parts: [{ text: "Okay, I am ready to analyze the user's prompt." }] },
-                { role: "user", parts: [{ text: promptToAnalyze }] }
-            ];
-
-            const analysisText = await callGemini(payload);
-            
-            const formattedAnalysis = analysisText
-                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-900 font-semibold">$1</strong>')
-                .replace(/\n/g, '<br>');
-
-            analyzerResult.innerHTML = `<div class="prose prose-sm max-w-none text-gray-700">${formattedAnalysis}</div>`;
-            
-            analyzerLoading.classList.add('hidden');
-            analyzerResult.classList.remove('hidden');
         }
 
         async function handleSendMessage() {
-            const userMessage = messageInput.value.trim();
-            if (userMessage === '') return;
-
-            appendMessage('user', userMessage);
-            conversationHistory.push({ role: "user", parts: [{ text: userMessage }] });
-            
-            messageInput.value = '';
-            messageInput.disabled = true;
-
-            await getJenResponse();
+            // This function is now effectively disabled in favor of suggestion clicks.
+            // We'll leave it for potential future use or manual override.
         }
 
         function updateLessonTracker(aiResponse) {
@@ -304,17 +316,15 @@
 
         // --- Event Listeners ---
         sendButton.addEventListener('click', handleSendMessage);
-        messageInput.addEventListener('keydown', (e) => e.key === 'Enter' && handleSendMessage());
-        
         closeModalBtn.addEventListener('click', closeModal);
         analyzerModal.addEventListener('click', (e) => {
             if (e.target === analyzerModal) closeModal();
         });
         
+        // Initial greeting from Jen
         window.addEventListener('load', () => {
-            const firstMessage = "Hello! I'm Jen. My purpose is to help you learn how to get the most out of AI models like me.\n\nLet's start with Lesson 1. In your own words, what do you think a 'prompt' is?";
-            appendMessage('ai', firstMessage);
-            conversationHistory.push({ role: "model", parts: [{ text: firstMessage }] });
+            // Start the conversation by getting the first message from the AI
+            getJenResponse();
         });
     </script>
 </body>
